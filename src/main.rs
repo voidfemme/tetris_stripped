@@ -1,5 +1,8 @@
 mod shapes;
 
+use fern::Dispatch;
+use log::info;
+
 use std::io as std_io;
 use std::io::{Error, StdoutLock, Write};
 use std::sync::mpsc;
@@ -22,6 +25,24 @@ const N_FIELD_WIDTH: u8 = 18;
 const N_FIELD_HEIGHT: u8 = 18;
 const LOOKUP: [char; 11] = [' ', 'A', 'B', 'C', 'D', 'F', 'G', '=', '#', '.', 'X'];
 
+fn setup_logger(log_file: &str) -> Result<(), fern::InitError> {
+    Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{} [{}] {}:{} {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                record.file().unwrap_or("<unknown>"),
+                record.line().unwrap_or(0),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info)
+        .chain(fern::log_file(log_file)?)
+        .apply()?;
+    Ok(())
+}
+
 // A mock function to allow the code below to run
 fn does_it_fit(
     n_tetromino: u8,
@@ -30,9 +51,30 @@ fn does_it_fit(
     n_pos_x: u8,
     field: &Vec<Vec<u8>>,
 ) -> bool {
+    let tetrominos = get_shapes();
+    for px in 0..4 {
+        for py in 0..4 {
+            // Get index into piece
+            let pi = rotate(px, py, n_rotation);
+
+            // Check that test is in bounds. Note out of bounds does not necessarily mean a fail,
+            // as the long vertical piece can have cells that lie outside the boundary, so we'll
+            // just ignore them.
+            if n_pos_x + px < N_FIELD_WIDTH {
+                if n_pos_y + py < N_FIELD_HEIGHT {
+                    // In Bounds so do collision Check
+                    if tetrominos[n_tetromino as usize].shape()[pi as usize] != 0
+                    // 10 is the index of the LOOKUP const
+                        && field[(n_pos_y + py) as usize][(n_pos_x + px) as usize] != 0
+                    {
+                        return false; // Fail on first hit
+                    }
+                }
+            }
+        }
+    }
     true
 }
-
 fn rotate(px: u8, py: u8, r: u8) -> u8 {
     match r % 4 {
         0 => return py * 4 + px,
@@ -71,7 +113,7 @@ fn main() -> Result<(), std::io::Error> {
 
         // Set up the game
         let tetrominos = get_shapes();
-        let mut n_current_piece: u8 = 1;
+        let mut n_current_piece: u8 = 4;
         let mut n_current_rotation: u8 = 0;
         let mut n_current_x: u8 = N_FIELD_WIDTH / 2;
         let mut n_current_y: u8 = 0;
@@ -127,10 +169,7 @@ fn main() -> Result<(), std::io::Error> {
                             &field,
                         ) {
                             n_current_x += 1;
-                            display_message(
-                                &mut handle,
-                                "'d' or 'Right'",
-                            )?;
+                            display_message(&mut handle, "'d' or 'Right'")?;
                         }
                     }
                     Key::Char('a') | Key::Left => {
@@ -142,10 +181,7 @@ fn main() -> Result<(), std::io::Error> {
                             &field,
                         ) {
                             n_current_x -= 1;
-                            display_message(
-                                &mut handle,
-                                "'a' or 'Left'",
-                            )?;
+                            display_message(&mut handle, "'a' or 'Left'")?;
                         }
                     }
                     Key::Char('s') | Key::Down => {
@@ -157,10 +193,7 @@ fn main() -> Result<(), std::io::Error> {
                             &field,
                         ) {
                             n_current_y += 1;
-                            display_message(
-                                &mut handle,
-                                "'s' or 'Down'",
-                            )?;
+                            display_message(&mut handle, "'s' or 'Down'")?;
                         }
                     }
                     Key::Char(' ') => {
@@ -190,10 +223,7 @@ fn main() -> Result<(), std::io::Error> {
                             &field,
                         ) {
                             n_current_y -= 1;
-                            display_message(
-                                &mut handle,
-                                "'w' or 'Up'",
-                            )?;
+                            display_message(&mut handle, "'w' or 'Up'")?;
                         }
                     }
                     _ => break,
@@ -205,7 +235,41 @@ fn main() -> Result<(), std::io::Error> {
             }
 
             // DISPLAY =====================================
-        }
-        Ok(())
+
+            // Draw tetromino
+            // Iterate over the tetromino piece vector and if the cell is not '0' write the LOOKUP value to
+            // the field. This has the effect of setting the values of only the cells that
+            // represent the piece.
+            for px in 0..4 {
+                for py in 0..4 {
+                    if (tetrominos[n_current_piece as usize].shape()
+                        [rotate(px, py, n_current_rotation) as usize])
+                        != 0
+                    {
+                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
+                            n_current_piece;
+                    } else {
+                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] = 0;
+                    }
+                }
+            }
+
+            // Draw field
+            write!(handle, "{}", clear::All)?;
+            for (y, row) in field.iter().enumerate() {
+                for (x, &ch) in row.iter().enumerate() {
+                    write!(
+                        handle,
+                        "{}{}",
+                        cursor::Goto(x as u16 + 2, y as u16 + 2),
+                        LOOKUP[ch as usize]
+                    )?;
+                    handle.flush()?;
+                }
+            }
+        } // END MAIN LOOP
+        write!(handle, "{}", cursor::Show)?;
+        handle.flush()?;
     }
+    Ok(())
 }
