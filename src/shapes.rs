@@ -11,7 +11,7 @@ impl Tetromino {
 pub fn get_shapes() -> Vec<Tetromino> {
     vec![
         Tetromino {
-            shape: vec![0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 2, 0],
+            shape: vec![0, 2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0],
         }, // Straight line
         // ..X.
         // ..X.

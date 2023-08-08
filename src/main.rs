@@ -19,7 +19,7 @@ use termion::input::TermRead;
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::{clear, cursor};
 
-use shapes::{get_shapes, Tetromino};
+use shapes::get_shapes;
 
 const N_FIELD_WIDTH: u8 = 18;
 const N_FIELD_HEIGHT: u8 = 18;
@@ -43,7 +43,6 @@ fn setup_logger(log_file: &str) -> Result<(), fern::InitError> {
     Ok(())
 }
 
-// A mock function to allow the code below to run
 fn does_it_fit(
     n_tetromino: u8,
     n_rotation: u8,
