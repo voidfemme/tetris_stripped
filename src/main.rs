@@ -1,10 +1,10 @@
 mod shapes;
 
 use fern::Dispatch;
-use log::info;
+use log::{info, warn};
 
 use std::io as std_io;
-use std::io::{Error, StdoutLock, Write};
+use std::io::Write;
 use std::sync::mpsc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use termion::event::Key;
 use termion::input::TermRead;
-use termion::raw::{IntoRawMode, RawTerminal};
+use termion::raw::IntoRawMode;
 use termion::{clear, cursor};
 
 use shapes::get_shapes;
@@ -84,21 +84,9 @@ fn rotate(px: u8, py: u8, r: u8) -> u8 {
     }
 }
 
-fn display_message(
-    handle: &mut RawTerminal<StdoutLock>,
-    message: &str,
-) -> Result<(), std::io::Error> {
-    write!(
-        handle,
-        "{}{}",
-        cursor::Goto(N_FIELD_WIDTH as u16 + 6, 2),
-        message
-    )?;
-    Ok(())
-}
-
 fn main() -> Result<(), std::io::Error> {
     {
+        setup_logger("output.log").expect("Failed to initialize logger");
         let stdout = std_io::stdout();
         let mut handle = stdout.lock().into_raw_mode()?;
         write!(handle, "{}", cursor::Hide)?;
@@ -107,12 +95,12 @@ fn main() -> Result<(), std::io::Error> {
         // Create play field and play field buffer
         let mut field: Vec<Vec<u8>> =
             vec![vec![0; N_FIELD_WIDTH as usize]; N_FIELD_HEIGHT as usize];
-        let mut field_buffer: Vec<Vec<u8>> =
+        let mut _field_buffer: Vec<Vec<u8>> =
             vec![vec![0; N_FIELD_WIDTH as usize]; N_FIELD_HEIGHT as usize];
 
         // Set up the game
         let tetrominos = get_shapes();
-        let mut n_current_piece: u8 = 4;
+        let n_current_piece: u8 = 4;
         let mut n_current_rotation: u8 = 0;
         let mut n_current_x: u8 = N_FIELD_WIDTH / 2;
         let mut n_current_y: u8 = 0;
@@ -134,18 +122,19 @@ fn main() -> Result<(), std::io::Error> {
                         Ok(key) => {
                             input_tx.send(key)?;
                             if key == Key::Char('q') {
+                                info!("'q' key recieved; quitting...");
                                 game_over_clone.store(true, Ordering::SeqCst);
                                 break;
                             }
                         }
-                        Err(err) => {
+                        Err(_err) => {
                             break;
                         }
                     }
                 }
                 Ok(())
             })();
-            if let Err(e) = result {
+            if let Err(_err) = result {
                 // Handle the error here
             }
         });
@@ -167,8 +156,8 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y,
                             &field,
                         ) {
+                            info!("Main thread recieved 'd' key");
                             n_current_x += 1;
-                            display_message(&mut handle, "'d' or 'Right'")?;
                         }
                     }
                     Key::Char('a') | Key::Left => {
@@ -179,8 +168,10 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y,
                             &field,
                         ) {
-                            n_current_x -= 1;
-                            display_message(&mut handle, "'a' or 'Left'")?;
+                            info!("Main thread recieved 'a' key");
+                            if n_current_x - 1 != 0 {
+                                n_current_x -= 1;
+                            }
                         }
                     }
                     Key::Char('s') | Key::Down => {
@@ -191,8 +182,8 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y + 1,
                             &field,
                         ) {
+                            info!("Main thread recieved 's' key");
                             n_current_y += 1;
-                            display_message(&mut handle, "'s' or 'Down'")?;
                         }
                     }
                     Key::Char(' ') => {
@@ -205,12 +196,12 @@ fn main() -> Result<(), std::io::Error> {
                                 &field,
                             )
                         {
+                            info!("Main thread recieved '<space>' key");
                             // Rotate, but latch to stop wild spinning
                             n_current_rotation += 1;
                             b_rotate_hold = false;
                         } else {
                             b_rotate_hold = true;
-                            display_message(&mut handle, "rotate")?;
                         }
                     }
                     Key::Char('w') | Key::Up => {
@@ -221,8 +212,10 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y + 1,
                             &field,
                         ) {
-                            n_current_y -= 1;
-                            display_message(&mut handle, "'w' or 'Up'")?;
+                            info!("Main thread recieved 'w' key");
+                            if n_current_y - 1 != 0 {
+                                n_current_y -= 1;
+                            }
                         }
                     }
                     _ => break,
