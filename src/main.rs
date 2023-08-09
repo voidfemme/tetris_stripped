@@ -4,19 +4,20 @@ use fern::Dispatch;
 use log::{info, warn};
 
 use std::io as std_io;
-use std::io::{Error, StdoutLock, Write};
+use std::io::Write;
 use std::sync::mpsc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 
 use termion::event::Key;
 use termion::input::TermRead;
-use termion::raw::{IntoRawMode, RawTerminal};
+use termion::raw::IntoRawMode;
 use termion::{clear, cursor};
 
 use shapes::get_shapes;
@@ -46,8 +47,8 @@ fn setup_logger(log_file: &str) -> Result<(), fern::InitError> {
 fn does_it_fit(
     n_tetromino: u8,
     n_rotation: u8,
-    n_pos_y: u8,
-    n_pos_x: u8,
+    n_pos_y: i16,
+    n_pos_x: i16,
     field: &Vec<Vec<u8>>,
 ) -> bool {
     let tetrominos = get_shapes();
@@ -59,12 +60,12 @@ fn does_it_fit(
             // Check that test is in bounds. Note out of bounds does not necessarily mean a fail,
             // as the long vertical piece can have cells that lie outside the boundary, so we'll
             // just ignore them.
-            if n_pos_x + px < N_FIELD_WIDTH {
-                if n_pos_y + py < N_FIELD_HEIGHT {
+            if (n_pos_x + px as i16) < N_FIELD_WIDTH.into() {
+                if (n_pos_y + py as i16) < N_FIELD_HEIGHT.into() {
                     // In Bounds so do collision Check
                     if tetrominos[n_tetromino as usize].shape()[pi as usize] != 0
                     // 10 is the index of the LOOKUP const
-                        && field[(n_pos_y + py) as usize][(n_pos_x + px) as usize] != 0
+                        && field[(n_pos_y + py as i16) as usize][(n_pos_x + px as i16) as usize] != 0
                     {
                         return false; // Fail on first hit
                     }
@@ -85,7 +86,7 @@ fn rotate(px: u8, py: u8, r: u8) -> u8 {
 }
 
 fn main() -> Result<(), std::io::Error> {
-    let mut n_score: i32 = 0;
+    let _n_score: i32 = 0;
     {
         setup_logger("output.log").expect("Failed to initialize logger");
         let stdout = std_io::stdout();
@@ -101,8 +102,8 @@ fn main() -> Result<(), std::io::Error> {
         let tetrominos = get_shapes();
         let n_current_piece: u8 = 4;
         let mut n_current_rotation: u8 = 0;
-        let mut n_current_x: u8 = 0;
-        let mut n_current_y: u8 = 0;
+        let mut n_current_x: i16 = 0;
+        let mut n_current_y: i16 = 0;
         let mut b_rotate_hold: bool = false;
 
         // Create a thread for handling input
@@ -218,10 +219,10 @@ fn main() -> Result<(), std::io::Error> {
                     }
                     _ => break,
                 },
-                Err(_e) => {
+                Err(e) => {
                     // No message this time, or an error occurred
                     // Just continue with the game loop
-                    warn!("No message from rx this time.");
+                    warn!("Error: No message from rx this time: {}", e);
                 }
             }
 
@@ -237,10 +238,11 @@ fn main() -> Result<(), std::io::Error> {
                         [rotate(px, py, n_current_rotation) as usize])
                         != 0
                     {
-                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
-                            n_current_piece;
+                        field[(n_current_y + py as i16) as usize]
+                            [(n_current_x + px as i16) as usize] = n_current_piece;
                     } else {
-                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] = 0;
+                        field[(n_current_y + py as i16) as usize]
+                            [(n_current_x + px as i16) as usize] = 0;
                     }
                 }
             }
