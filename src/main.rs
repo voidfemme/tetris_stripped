@@ -1,7 +1,7 @@
 mod shapes;
 
 use fern::Dispatch;
-use log::info;
+use log::{info, warn};
 
 use std::io as std_io;
 use std::io::{Error, StdoutLock, Write};
@@ -84,21 +84,10 @@ fn rotate(px: u8, py: u8, r: u8) -> u8 {
     }
 }
 
-fn display_message(
-    handle: &mut RawTerminal<StdoutLock>,
-    message: &str,
-) -> Result<(), std::io::Error> {
-    write!(
-        handle,
-        "{}{}",
-        cursor::Goto(N_FIELD_WIDTH as u16 + 6, 2),
-        message
-    )?;
-    Ok(())
-}
-
 fn main() -> Result<(), std::io::Error> {
+    let mut n_score: i32 = 0;
     {
+        setup_logger("output.log").expect("Failed to initialize logger");
         let stdout = std_io::stdout();
         let mut handle = stdout.lock().into_raw_mode()?;
         write!(handle, "{}", cursor::Hide)?;
@@ -107,14 +96,12 @@ fn main() -> Result<(), std::io::Error> {
         // Create play field and play field buffer
         let mut field: Vec<Vec<u8>> =
             vec![vec![0; N_FIELD_WIDTH as usize]; N_FIELD_HEIGHT as usize];
-        let mut field_buffer: Vec<Vec<u8>> =
-            vec![vec![0; N_FIELD_WIDTH as usize]; N_FIELD_HEIGHT as usize];
 
         // Set up the game
         let tetrominos = get_shapes();
-        let mut n_current_piece: u8 = 4;
+        let n_current_piece: u8 = 4;
         let mut n_current_rotation: u8 = 0;
-        let mut n_current_x: u8 = N_FIELD_WIDTH / 2;
+        let mut n_current_x: u8 = 0;
         let mut n_current_y: u8 = 0;
         let mut b_rotate_hold: bool = false;
 
@@ -127,11 +114,13 @@ fn main() -> Result<(), std::io::Error> {
         // Spawn a thread to handle user input
         thread::spawn(move || {
             let result: Result<(), Box<dyn std::error::Error>> = (|| {
+                info!("Spawned new thread!");
                 let stdin = std_io::stdin();
 
                 for key in stdin.keys() {
                     match key {
                         Ok(key) => {
+                            info!("Input handling thread detected {:#?} input", key);
                             input_tx.send(key)?;
                             if key == Key::Char('q') {
                                 game_over_clone.store(true, Ordering::SeqCst);
@@ -139,14 +128,16 @@ fn main() -> Result<(), std::io::Error> {
                             }
                         }
                         Err(err) => {
+                            info!("Input error: {}", err);
                             break;
                         }
                     }
                 }
                 Ok(())
             })();
-            if let Err(e) = result {
+            if let Err(err) = result {
                 // Handle the error here
+                warn!("An error occurred: {}", err);
             }
         });
 
@@ -159,7 +150,7 @@ fn main() -> Result<(), std::io::Error> {
             // INPUT =======================================
             match rx.try_recv() {
                 Ok(key) => match key {
-                    Key::Char('d') | Key::Right => {
+                    Key::Right => {
                         if does_it_fit(
                             n_current_piece,
                             n_current_rotation,
@@ -167,11 +158,11 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y,
                             &field,
                         ) {
+                            info!("'d' pressed; n_current_x = {n_current_x}");
                             n_current_x += 1;
-                            display_message(&mut handle, "'d' or 'Right'")?;
                         }
                     }
-                    Key::Char('a') | Key::Left => {
+                    Key::Left => {
                         if does_it_fit(
                             n_current_piece,
                             n_current_rotation,
@@ -179,11 +170,11 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y,
                             &field,
                         ) {
+                            info!("'a' pressed; n_current_x = {n_current_x}");
                             n_current_x -= 1;
-                            display_message(&mut handle, "'a' or 'Left'")?;
                         }
                     }
-                    Key::Char('s') | Key::Down => {
+                    Key::Down => {
                         if does_it_fit(
                             n_current_piece,
                             n_current_rotation,
@@ -191,8 +182,8 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y + 1,
                             &field,
                         ) {
+                            info!("'s' pressed; n_current_y = {n_current_y}");
                             n_current_y += 1;
-                            display_message(&mut handle, "'s' or 'Down'")?;
                         }
                     }
                     Key::Char(' ') => {
@@ -205,15 +196,15 @@ fn main() -> Result<(), std::io::Error> {
                                 &field,
                             )
                         {
+                            info!("'<space>' pressed; n_current_rotation = {n_current_rotation}");
                             // Rotate, but latch to stop wild spinning
                             n_current_rotation += 1;
                             b_rotate_hold = false;
                         } else {
                             b_rotate_hold = true;
-                            display_message(&mut handle, "rotate")?;
                         }
                     }
-                    Key::Char('w') | Key::Up => {
+                    Key::Up => {
                         if does_it_fit(
                             n_current_piece,
                             n_current_rotation,
@@ -221,8 +212,8 @@ fn main() -> Result<(), std::io::Error> {
                             n_current_y + 1,
                             &field,
                         ) {
+                            info!("'w' pressed; n_current_y = {n_current_y}");
                             n_current_y -= 1;
-                            display_message(&mut handle, "'w' or 'Up'")?;
                         }
                     }
                     _ => break,
@@ -230,6 +221,7 @@ fn main() -> Result<(), std::io::Error> {
                 Err(_e) => {
                     // No message this time, or an error occurred
                     // Just continue with the game loop
+                    warn!("No message from rx this time.");
                 }
             }
 
@@ -257,6 +249,11 @@ fn main() -> Result<(), std::io::Error> {
             write!(handle, "{}", clear::All)?;
             for (y, row) in field.iter().enumerate() {
                 for (x, &ch) in row.iter().enumerate() {
+                    write!(
+                        handle,
+                        "{}n_current_x = {n_current_x}, n_current_y = {n_current_y}",
+                        cursor::Goto(N_FIELD_WIDTH as u16 + 5, 2)
+                    )?;
                     write!(
                         handle,
                         "{}{}",
