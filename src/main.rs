@@ -105,9 +105,10 @@ fn main() -> Result<(), std::io::Error> {
         let mut n_current_x: u8 = N_FIELD_WIDTH / 2;
         let mut n_current_y: u8 = 0;
         let mut b_rotate_hold: bool = false;
+        let mut b_game_over: bool = false;
 
         // Create a thread for handling input
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(2);
         let input_tx = tx.clone();
         let game_over = Arc::new(AtomicBool::new(false));
         let game_over_clone = Arc::clone(&game_over);
@@ -121,6 +122,7 @@ fn main() -> Result<(), std::io::Error> {
                     match key {
                         Ok(key) => {
                             input_tx.send(key)?;
+                            info!("key {:#?} detected in input capture thread.", key);
                             if key == Key::Char('q') {
                                 info!("'q' key recieved; quitting...");
                                 game_over_clone.store(true, Ordering::SeqCst);
@@ -146,8 +148,8 @@ fn main() -> Result<(), std::io::Error> {
             // TIMING ======================================
             sleep(Duration::from_millis(50));
             // INPUT =======================================
-            match rx.try_recv() {
-                Ok(key) => match key {
+            while let Ok(key) = rx.try_recv() {
+                match key {
                     Key::Char('d') | Key::Right => {
                         if does_it_fit(
                             n_current_piece,
@@ -218,12 +220,12 @@ fn main() -> Result<(), std::io::Error> {
                             }
                         }
                     }
-                    _ => break,
-                },
-                Err(_e) => {
-                    // No message this time, or an error occurred
-                    // Just continue with the game loop
+                    _ => b_game_over = true,
                 }
+            }
+
+            if b_game_over {
+                break;
             }
 
             // DISPLAY =====================================
