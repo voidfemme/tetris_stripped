@@ -6,6 +6,7 @@ use log::{info, warn};
 use std::io as std_io;
 use std::io::Write;
 use std::sync::mpsc;
+use std::sync::mpsc::TryRecvError;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -108,7 +109,7 @@ fn main() -> Result<(), std::io::Error> {
         let mut b_game_over: bool = false;
 
         // Create a thread for handling input
-        let (tx, rx) = mpsc::sync_channel(2);
+        let (tx, rx) = mpsc::sync_channel(5);
         let input_tx = tx.clone();
         let game_over = Arc::new(AtomicBool::new(false));
         let game_over_clone = Arc::clone(&game_over);
@@ -146,81 +147,91 @@ fn main() -> Result<(), std::io::Error> {
         // MAIN GAME LOOP
         loop {
             // TIMING ======================================
-            sleep(Duration::from_millis(50));
+            sleep(Duration::from_millis(25));
             // INPUT =======================================
-            while let Ok(key) = rx.try_recv() {
-                match key {
-                    Key::Char('d') | Key::Right => {
-                        if does_it_fit(
-                            n_current_piece,
-                            n_current_rotation,
-                            n_current_x + 1,
-                            n_current_y,
-                            &field,
-                        ) {
-                            info!("Main thread recieved 'd' key");
-                            n_current_x += 1;
-                        }
-                    }
-                    Key::Char('a') | Key::Left => {
-                        if does_it_fit(
-                            n_current_piece,
-                            n_current_rotation,
-                            n_current_x - 1,
-                            n_current_y,
-                            &field,
-                        ) {
-                            info!("Main thread recieved 'a' key");
-                            if n_current_x - 1 != 0 {
-                                n_current_x -= 1;
-                            }
-                        }
-                    }
-                    Key::Char('s') | Key::Down => {
-                        if does_it_fit(
-                            n_current_piece,
-                            n_current_rotation,
-                            n_current_x,
-                            n_current_y + 1,
-                            &field,
-                        ) {
-                            info!("Main thread recieved 's' key");
-                            n_current_y += 1;
-                        }
-                    }
-                    Key::Char(' ') => {
-                        if b_rotate_hold
-                            && does_it_fit(
+            match rx.try_recv() {
+                Ok(key) => {
+                    match key {
+                        Key::Char('d') | Key::Right => {
+                            if does_it_fit(
                                 n_current_piece,
-                                n_current_rotation + 1,
-                                n_current_x,
+                                n_current_rotation,
+                                n_current_x + 1,
                                 n_current_y,
                                 &field,
-                            )
-                        {
-                            info!("Main thread recieved '<space>' key");
-                            // Rotate, but latch to stop wild spinning
-                            n_current_rotation += 1;
-                            b_rotate_hold = false;
-                        } else {
-                            b_rotate_hold = true;
-                        }
-                    }
-                    Key::Char('w') | Key::Up => {
-                        if does_it_fit(
-                            n_current_piece,
-                            n_current_rotation,
-                            n_current_x,
-                            n_current_y + 1,
-                            &field,
-                        ) {
-                            info!("Main thread recieved 'w' key");
-                            if n_current_y - 1 != 0 {
-                                n_current_y -= 1;
+                            ) {
+                                info!("Main thread recieved 'd' key");
+                                n_current_x += 1;
                             }
                         }
+                        Key::Char('a') | Key::Left => {
+                            if does_it_fit(
+                                n_current_piece,
+                                n_current_rotation,
+                                n_current_x - 1,
+                                n_current_y,
+                                &field,
+                            ) {
+                                info!("Main thread recieved 'a' key");
+                                if n_current_x - 1 != 0 {
+                                    n_current_x -= 1;
+                                }
+                            }
+                        }
+                        Key::Char('s') | Key::Down => {
+                            if does_it_fit(
+                                n_current_piece,
+                                n_current_rotation,
+                                n_current_x,
+                                n_current_y + 1,
+                                &field,
+                            ) {
+                                info!("Main thread recieved 's' key");
+                                n_current_y += 1;
+                            }
+                        }
+                        Key::Char(' ') => {
+                            if b_rotate_hold
+                                && does_it_fit(
+                                    n_current_piece,
+                                    n_current_rotation + 1,
+                                    n_current_x,
+                                    n_current_y,
+                                    &field,
+                                )
+                            {
+                                info!("Main thread recieved '<space>' key");
+                                // Rotate, but latch to stop wild spinning
+                                n_current_rotation += 1;
+                                b_rotate_hold = false;
+                            } else {
+                                b_rotate_hold = true;
+                            }
+                        }
+                        Key::Char('w') | Key::Up => {
+                            if does_it_fit(
+                                n_current_piece,
+                                n_current_rotation,
+                                n_current_x,
+                                n_current_y + 1,
+                                &field,
+                            ) {
+                                info!("Main thread recieved 'w' key");
+                                if n_current_y - 1 != 0 {
+                                    n_current_y -= 1;
+                                }
+                            }
+                        }
+                        _ => b_game_over = true,
                     }
-                    _ => b_game_over = true,
+                }
+                Err(TryRecvError::Empty) => {
+                    // No key pressed
+                    info!("No key pressed");
+                }
+                Err(TryRecvError::Disconnected) => {
+                    info!("Input thread disconnected, exiting.");
+                    break;
                 }
             }
 
