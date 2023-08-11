@@ -153,6 +153,7 @@ fn main() -> Result<(), std::io::Error> {
                 Ok(key) => {
                     match key {
                         Key::Char('d') | Key::Right => {
+                            info!("Main thread recieved <right>/'d' key");
                             if does_it_fit(
                                 n_current_piece,
                                 n_current_rotation,
@@ -160,11 +161,14 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y,
                                 &field,
                             ) {
-                                info!("Main thread recieved 'd' key");
                                 n_current_x += 1;
+                                info!("n_current_x = {n_current_x}");
+                            } else {
+                                info!("piece does not fit");
                             }
                         }
                         Key::Char('a') | Key::Left => {
+                            info!("Main thread recieved <left>/'a' key");
                             if does_it_fit(
                                 n_current_piece,
                                 n_current_rotation,
@@ -172,13 +176,16 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y,
                                 &field,
                             ) {
-                                info!("Main thread recieved 'a' key");
                                 if n_current_x - 1 != 0 {
                                     n_current_x -= 1;
                                 }
+                                info!("n_current_x = {n_current_x}");
+                            } else {
+                                info!("piece does not fit");
                             }
                         }
                         Key::Char('s') | Key::Down => {
+                            info!("Main thread recieved <down>/'s' key");
                             if does_it_fit(
                                 n_current_piece,
                                 n_current_rotation,
@@ -186,11 +193,14 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y + 1,
                                 &field,
                             ) {
-                                info!("Main thread recieved 's' key");
                                 n_current_y += 1;
+                                info!("n_current_y = {n_current_y}");
+                            } else {
+                                info!("piece does not fit");
                             }
                         }
                         Key::Char(' ') => {
+                            info!("Main thread recieved <space> key");
                             if b_rotate_hold
                                 && does_it_fit(
                                     n_current_piece,
@@ -200,15 +210,17 @@ fn main() -> Result<(), std::io::Error> {
                                     &field,
                                 )
                             {
-                                info!("Main thread recieved '<space>' key");
                                 // Rotate, but latch to stop wild spinning
                                 n_current_rotation += 1;
                                 b_rotate_hold = false;
+                                info!("rotating piece");
                             } else {
                                 b_rotate_hold = true;
+                                info!("piece cannot rotate");
                             }
                         }
                         Key::Char('w') | Key::Up => {
+                            info!("Main thread recieved <up>/'w' key");
                             if does_it_fit(
                                 n_current_piece,
                                 n_current_rotation,
@@ -216,10 +228,12 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y + 1,
                                 &field,
                             ) {
-                                info!("Main thread recieved 'w' key");
                                 if n_current_y - 1 != 0 {
                                     n_current_y -= 1;
                                 }
+                                info!("n_current_y = {n_current_y}");
+                            } else {
+                                info!("piece does not fit");
                             }
                         }
                         _ => b_game_over = true,
@@ -227,7 +241,6 @@ fn main() -> Result<(), std::io::Error> {
                 }
                 Err(TryRecvError::Empty) => {
                     // No key pressed
-                    info!("No key pressed");
                 }
                 Err(TryRecvError::Disconnected) => {
                     info!("Input thread disconnected, exiting.");
