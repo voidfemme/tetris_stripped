@@ -1,7 +1,7 @@
 mod shapes;
 
 use fern::Dispatch;
-use log::info;
+use log::{info, warn};
 
 use std::io as std_io;
 use std::io::Write;
@@ -162,6 +162,10 @@ fn main() -> Result<(), std::io::Error> {
             // TIMING ======================================
             sleep(Duration::from_millis(25));
             // INPUT =======================================
+            let prev_x = n_current_x;
+            let prev_y = n_current_y;
+            let prev_rotation = n_current_rotation;
+
             match rx.try_recv() {
                 Ok(key) => {
                     match key {
@@ -177,7 +181,7 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_x += 1;
                                 info!("x = {n_current_x}, y = {n_current_y}");
                             } else {
-                                info!("piece does not fit");
+                                warn!("piece does not fit");
                             }
                         }
                         Key::Char('a') | Key::Left => {
@@ -192,7 +196,7 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_x -= 1;
                                 info!("x = {n_current_x}, y = {n_current_y}");
                             } else {
-                                info!("piece does not fit");
+                                warn!("piece does not fit");
                             }
                         }
                         Key::Char('s') | Key::Down => {
@@ -207,28 +211,23 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y += 1;
                                 info!("x = {n_current_x}, y = {n_current_y}");
                             } else {
-                                info!("piece does not fit");
+                                warn!("piece does not fit");
                             }
                         }
                         Key::Char(' ') => {
                             info!("Main thread recieved <space> key");
-                            if b_rotate_hold
-                                && does_it_fit(
-                                    n_current_piece,
-                                    n_current_rotation + 1,
-                                    n_current_x,
-                                    n_current_y,
-                                    &field,
-                                )
-                            {
+                            if does_it_fit(
+                                n_current_piece,
+                                n_current_rotation,
+                                n_current_x,
+                                n_current_y,
+                                &field,
+                            ) {
                                 info!("rotating piece: b_rotate_hold = {b_rotate_hold}");
                                 // Rotate, but latch to stop wild spinning
                                 n_current_rotation += 1;
-                                b_rotate_hold = false;
                             } else {
-                                info!("rotating piece: b_rotate_hold = {b_rotate_hold}");
-                                b_rotate_hold = true;
-                                info!("piece cannot rotate");
+                                warn!("piece does not fit");
                             }
                         }
                         Key::Char('w') | Key::Up => {
@@ -243,7 +242,7 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y -= 1;
                                 info!("n_current_y = {n_current_y}");
                             } else {
-                                info!("piece does not fit");
+                                warn!("piece does not fit");
                             }
                         }
                         _ => b_game_over = true,
@@ -276,12 +275,25 @@ fn main() -> Result<(), std::io::Error> {
             // Iterate over the tetromino piece vector and if the cell is not '0' write the LOOKUP value to
             // the field. This has the effect of setting the values of only the cells that
             // represent the piece.
+
+            // 1. Clear the Tetromino's previous position
             for px in 0..4 {
                 for py in 0..4 {
-                    if (tetrominos[n_current_piece as usize].shape()
-                        [rotate(px, py, n_current_rotation) as usize])
-                        != 10
+                    if tetrominos[n_current_piece as usize].shape()
+                        [rotate(px, py, prev_rotation) as usize]
+                        != 0
                     {
+                        field[(prev_y + py) as usize][(prev_x + px) as usize] = 0;
+                    }
+                }
+            }
+
+            // 2. Draw the Tetromino in its new position
+            for px in 0..4 {
+                for py in 0..4 {
+                    let cell_value = tetrominos[n_current_piece as usize].shape()
+                        [rotate(px, py, n_current_rotation) as usize];
+                    if cell_value != 0 {
                         field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
                             n_current_piece;
                     }
