@@ -283,9 +283,6 @@ fn main() -> Result<(), std::io::Error> {
                         != 10
                     {
                         field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
-                            field[(n_current_y + py) as usize][(n_current_x + px) as usize];
-                    } else {
-                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
                             n_current_piece;
                     }
                 }
