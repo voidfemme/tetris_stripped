@@ -1,7 +1,7 @@
 mod shapes;
 
 use fern::Dispatch;
-use log::{info, warn};
+use log::info;
 
 use std::io as std_io;
 use std::io::Write;
@@ -22,8 +22,8 @@ use termion::{clear, cursor};
 
 use shapes::get_shapes;
 
-const N_FIELD_WIDTH: u8 = 18;
-const N_FIELD_HEIGHT: u8 = 18;
+const N_FIELD_WIDTH: i16 = 18;
+const N_FIELD_HEIGHT: i16 = 18;
 const LOOKUP: [char; 11] = [' ', 'A', 'B', 'C', 'D', 'F', 'G', '=', '#', '.', 'X'];
 
 fn setup_logger(log_file: &str) -> Result<(), fern::InitError> {
@@ -45,11 +45,11 @@ fn setup_logger(log_file: &str) -> Result<(), fern::InitError> {
 }
 
 fn does_it_fit(
-    n_tetromino: u8,
-    n_rotation: u8,
-    n_pos_y: u8,
-    n_pos_x: u8,
-    field: &Vec<Vec<u8>>,
+    n_tetromino: i16,
+    n_rotation: i16,
+    n_pos_y: i16,
+    n_pos_x: i16,
+    field: &Vec<Vec<i16>>,
 ) -> bool {
     let tetrominos = get_shapes();
     for px in 0..4 {
@@ -60,22 +60,35 @@ fn does_it_fit(
             // Check that test is in bounds. Note out of bounds does not necessarily mean a fail,
             // as the long vertical piece can have cells that lie outside the boundary, so we'll
             // just ignore them.
-            if n_pos_x + px < N_FIELD_WIDTH {
-                if n_pos_y + py < N_FIELD_HEIGHT {
+            if n_pos_x + px >= 0 && n_pos_x + px < N_FIELD_WIDTH {
+                if n_pos_y + py >= 0 && n_pos_y + py < N_FIELD_HEIGHT {
                     // In Bounds so do collision Check
                     if tetrominos[n_tetromino as usize].shape()[pi as usize] != 0
-                    // 10 is the index of the LOOKUP const
                         && field[(n_pos_y + py) as usize][(n_pos_x + px) as usize] != 0
                     {
+                        info!(
+                            "Collision check failure at ({}, {}): Found character '{}'",
+                            px,
+                            py,
+                            LOOKUP
+                                [field[(n_pos_y + py) as usize][(n_pos_x + px) as usize] as usize],
+                        );
                         return false; // Fail on first hit
                     }
                 }
+            } else {
+                info!(
+                    "Skipping ({}, {}): Not in bounds",
+                    n_pos_x + px,
+                    n_pos_y + py
+                );
             }
         }
     }
     true
 }
-fn rotate(px: u8, py: u8, r: u8) -> u8 {
+
+fn rotate(px: i16, py: i16, r: i16) -> i16 {
     match r % 4 {
         0 => return py * 4 + px,
         1 => return 12 + py - (px * 4),
@@ -94,18 +107,18 @@ fn main() -> Result<(), std::io::Error> {
         handle.flush()?;
 
         // Create play field and play field buffer
-        let mut field: Vec<Vec<u8>> =
+        let mut field: Vec<Vec<i16>> =
             vec![vec![0; N_FIELD_WIDTH as usize]; N_FIELD_HEIGHT as usize];
-        let mut _field_buffer: Vec<Vec<u8>> =
+        let mut _field_buffer: Vec<Vec<i16>> =
             vec![vec![0; N_FIELD_WIDTH as usize]; N_FIELD_HEIGHT as usize];
 
         // Set up the game
         let tetrominos = get_shapes();
-        let n_current_piece: u8 = 4;
-        let mut n_current_rotation: u8 = 0;
-        let mut n_current_x: u8 = N_FIELD_WIDTH / 2;
-        let mut n_current_y: u8 = 0;
-        let mut b_rotate_hold: bool = false;
+        let n_current_piece: i16 = 2;
+        let mut n_current_rotation: i16 = 0;
+        let mut n_current_x: i16 = N_FIELD_WIDTH / 2;
+        let mut n_current_y: i16 = 0;
+        let mut b_rotate_hold: bool = true;
         let mut b_game_over: bool = false;
 
         // Create a thread for handling input
@@ -162,7 +175,7 @@ fn main() -> Result<(), std::io::Error> {
                                 &field,
                             ) {
                                 n_current_x += 1;
-                                info!("n_current_x = {n_current_x}");
+                                info!("x = {n_current_x}, y = {n_current_y}");
                             } else {
                                 info!("piece does not fit");
                             }
@@ -176,10 +189,8 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y,
                                 &field,
                             ) {
-                                if n_current_x - 1 != 0 {
-                                    n_current_x -= 1;
-                                }
-                                info!("n_current_x = {n_current_x}");
+                                n_current_x -= 1;
+                                info!("x = {n_current_x}, y = {n_current_y}");
                             } else {
                                 info!("piece does not fit");
                             }
@@ -194,7 +205,7 @@ fn main() -> Result<(), std::io::Error> {
                                 &field,
                             ) {
                                 n_current_y += 1;
-                                info!("n_current_y = {n_current_y}");
+                                info!("x = {n_current_x}, y = {n_current_y}");
                             } else {
                                 info!("piece does not fit");
                             }
@@ -210,11 +221,12 @@ fn main() -> Result<(), std::io::Error> {
                                     &field,
                                 )
                             {
+                                info!("rotating piece: b_rotate_hold = {b_rotate_hold}");
                                 // Rotate, but latch to stop wild spinning
                                 n_current_rotation += 1;
                                 b_rotate_hold = false;
-                                info!("rotating piece");
                             } else {
+                                info!("rotating piece: b_rotate_hold = {b_rotate_hold}");
                                 b_rotate_hold = true;
                                 info!("piece cannot rotate");
                             }
@@ -228,9 +240,7 @@ fn main() -> Result<(), std::io::Error> {
                                 n_current_y + 1,
                                 &field,
                             ) {
-                                if n_current_y - 1 != 0 {
-                                    n_current_y -= 1;
-                                }
+                                n_current_y -= 1;
                                 info!("n_current_y = {n_current_y}");
                             } else {
                                 info!("piece does not fit");
@@ -254,6 +264,14 @@ fn main() -> Result<(), std::io::Error> {
 
             // DISPLAY =====================================
 
+            // Draw Border
+            for px in 0..N_FIELD_WIDTH {
+                for py in 0..N_FIELD_HEIGHT {
+                    if px == 0 || px == N_FIELD_WIDTH - 1 || py == 0 || py == N_FIELD_HEIGHT - 1 {
+                        field[px as usize][py as usize] = 8;
+                    }
+                }
+            }
             // Draw tetromino
             // Iterate over the tetromino piece vector and if the cell is not '0' write the LOOKUP value to
             // the field. This has the effect of setting the values of only the cells that
@@ -262,12 +280,13 @@ fn main() -> Result<(), std::io::Error> {
                 for py in 0..4 {
                     if (tetrominos[n_current_piece as usize].shape()
                         [rotate(px, py, n_current_rotation) as usize])
-                        != 0
+                        != 10
                     {
                         field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
-                            n_current_piece;
+                            field[(n_current_y + py) as usize][(n_current_x + px) as usize];
                     } else {
-                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] = 0;
+                        field[(n_current_y + py) as usize][(n_current_x + px) as usize] =
+                            n_current_piece;
                     }
                 }
             }
